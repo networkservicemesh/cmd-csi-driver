@@ -1,22 +1,20 @@
-FROM golang:1.18.2-buster as go
-ENV GO111MODULE=on
-ENV CGO_ENABLED=0
-ENV GOBIN=/bin
-RUN go install github.com/go-delve/delve/cmd/dlv@v1.8.2
-ADD https://github.com/spiffe/spire/releases/download/v1.2.2/spire-1.2.2-linux-x86_64-glibc.tar.gz .
-RUN tar xzvf spire-1.2.2-linux-x86_64-glibc.tar.gz -C /bin --strip=2 spire-1.2.2/bin/spire-server spire-1.2.2/bin/spire-agent
+# Build the NSM CSI Driver binary
+FROM golang:1.20.1-alpine AS builder
+ARG GIT_TAG
+ARG GIT_COMMIT
+ARG GIT_DIRTY
+RUN apk add make
+WORKDIR /code
+COPY go.mod /code/go.mod
+COPY go.sum /code/go.sum
+RUN go mod download
+ADD . /code
+#RUN CGO_ENABLED=0 make test
+RUN CGO_ENABLED=0 make GIT_TAG="${GIT_TAG}" GIT_COMMIT="${GIT_COMMIT}" GIT_DIRTY="${GIT_DIRTY}" build
 
-FROM go as build
-WORKDIR /build
-COPY . .
-RUN go build -o /bin/app .
-
-FROM build as test
-CMD go test -test.v ./...
-
-FROM test as debug
-CMD dlv -l :40000 --headless=true --api-version=2 test -test.v ./...
-
-FROM alpine as runtime
-COPY --from=build /bin/app /bin/app
-CMD /bin/app
+# Build a scratch image with just the NSM CSI driver binary
+FROM scratch AS cmd-csi-driver
+COPY --from=builder /code/bin/nsm-csi-driver /nsm-csi-driver
+WORKDIR /
+ENTRYPOINT ["/nsm-csi-driver"]
+CMD []
