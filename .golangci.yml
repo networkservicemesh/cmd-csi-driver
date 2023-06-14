@@ -1,7 +1,7 @@
 ---
 run:
   # concurrency: 6
-  go: "1.19"
+  go: "1.18"
   timeout: 2m
   issues-exit-code: 1
   tests: true
@@ -30,7 +30,7 @@ linters-settings:
   goimports:
     local-prefixes: github.com/networkservicemesh
   gocyclo:
-    min-complexity: 15
+    min-complexity: 20
   maligned:
     suggest-new: true
   dupl:
@@ -42,13 +42,11 @@ linters-settings:
     min-len: 2
     min-occurrences: 2
   depguard:
-    list-type: blacklist
-    include-go-root: false
-    packages:
-      - errors
-    packages-with-error-message:
-      # specify an error message to output when a blacklisted package is used
-      - errors: "Please use \"github.com/pkg/errors\" instead of \"errors\" in go imports"
+    rules:
+      main:
+        deny:
+          - pkg: errors
+            desc: Please use \"github.com/pkg/errors\" instead of \"errors\" in go imports
   misspell:
     locale: US
   unparam:
@@ -171,3 +169,7 @@ issues:
       linters:
         - revive
       text: 'package-comments: should have a package comment'
+    - path: pkg/driver/driver_test.go
+      linters:
+        - funlen
+      text: "Function 'TestNodePublishVolume'"

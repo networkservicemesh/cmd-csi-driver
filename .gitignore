@@ -4,8 +4,6 @@
 *.dll
 *.so
 *.dylib
-/bin
-nsm-csi-driver
 
 # Test binary, built with `go test -c`
 *.test

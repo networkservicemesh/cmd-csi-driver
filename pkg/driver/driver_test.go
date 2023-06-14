@@ -1,3 +1,19 @@
+// Copyright (c) 2023 Cisco and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package driver
 
 import (
@@ -13,50 +29,54 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/networkservicemesh/cmd-csi-driver/internal/version"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
 )
 
 const (
 	testNodeID = "nodeID"
 )
 
-func init() {
-	bindMountRW = func(src, dst string) error {
-		return writeMeta(dst, src)
-	}
-	unmount = func(dst string) error {
-		return os.Remove(metaPath(dst))
-	}
+func bindMountRWTest(src, dst string) error {
+	return writeMeta(dst, src)
+}
+func unmountTest(dst string) error {
+	return os.Remove(metaPath(dst))
 }
 
 func TestNew(t *testing.T) {
-	nsAPISocketDir := t.TempDir()
+	nsmSocketDir := t.TempDir()
 
 	t.Run("node ID is required", func(t *testing.T) {
-		_, err := New(Config{
-			NsAPISocketDir: nsAPISocketDir,
+		_, err := New(&Config{
+			NSMSocketDir:  nsmSocketDir,
+			customMount:   bindMountRWTest,
+			customUnmount: unmountTest,
 		})
 		require.EqualError(t, err, "node ID is required")
 	})
 
 	t.Run("network service API socket directory is required", func(t *testing.T) {
-		_, err := New(Config{
-			NodeID: testNodeID,
+		_, err := New(&Config{
+			NodeID:        testNodeID,
+			customMount:   bindMountRWTest,
+			customUnmount: unmountTest,
 		})
 		require.EqualError(t, err, "network service API socket directory is required")
 	})
 
 	t.Run("success", func(t *testing.T) {
-		_, err := New(Config{
-			NodeID:                  testNodeID,
-			NsAPISocketDir: nsAPISocketDir,
+		_, err := New(&Config{
+			NodeID:        testNodeID,
+			NSMSocketDir:  nsmSocketDir,
+			customMount:   bindMountRWTest,
+			customUnmount: unmountTest,
 		})
 		require.NoError(t, err)
 	})
@@ -70,7 +90,7 @@ func TestBoilerplateRPCs(t *testing.T) {
 		require.NoError(t, err)
 		requireProtoEqual(t, &csi.GetPluginInfoResponse{
 			Name:          "csi.networkservicemesh.io",
-			VendorVersion: version.Version(),
+			VendorVersion: "v1.0.0",
 		}, resp, "unexpected response")
 	})
 
@@ -164,7 +184,7 @@ func TestNodePublishVolume(t *testing.T) {
 			mutateReq: func(req *csi.NodePublishVolumeRequest) {
 				req.VolumeCapability.AccessType = &csi.VolumeCapability_Mount{
 					Mount: &csi.VolumeCapability_MountVolume{
-						FsType: "ANTHING HERE IS BAD",
+						FsType: "ANYTHING HERE IS BAD",
 					},
 				}
 			},
@@ -218,7 +238,7 @@ func TestNodePublishVolume(t *testing.T) {
 		{
 			desc: "target path already exists",
 			mungeTargetPath: func(t *testing.T, targetPath string) {
-				require.NoError(t, os.Mkdir(targetPath, 0755))
+				require.NoError(t, os.Mkdir(targetPath, 0o750))
 			},
 			expectCode: codes.OK,
 		},
@@ -239,7 +259,7 @@ func TestNodePublishVolume(t *testing.T) {
 				// write out a file to the target path... this will prevent our
 				// fake mount implementation from being able to write the
 				// metadata file, thus simulating a mount failure.
-				require.NoError(t, os.WriteFile(targetPath, nil, 0600))
+				require.NoError(t, os.WriteFile(targetPath, nil, 0o600))
 			},
 			expectCode:      codes.Internal,
 			expectMsgPrefix: "unable to mount",
@@ -281,13 +301,13 @@ func TestNodePublishVolume(t *testing.T) {
 				tt.mutateReq(req)
 			}
 
-			client, nsAPISocketDir := startDriver(t)
+			client, nsmSocketDir := startDriver(t)
 
 			resp, err := client.NodePublishVolume(context.Background(), req)
 			requireGRPCStatusPrefix(t, err, tt.expectCode, tt.expectMsgPrefix)
 			if err == nil {
 				assert.Equal(t, &csi.NodePublishVolumeResponse{}, resp)
-				assertMounted(t, targetPath, nsAPISocketDir)
+				assertMounted(t, targetPath, nsmSocketDir)
 			} else {
 				assert.Nil(t, resp)
 				assertNotMounted(t, targetPath)
@@ -297,7 +317,7 @@ func TestNodePublishVolume(t *testing.T) {
 }
 
 func TestNodeUnpublishVolume(t *testing.T) {
-	client, nsAPISocketDir := startDriver(t)
+	client, nsmSocketDir := startDriver(t)
 
 	for _, tt := range []struct {
 		desc            string
@@ -336,7 +356,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			mungeTargetPath: func(t *testing.T, targetPath string) {
 				// Prevent the directory from being removed by writing
 				// a file into it.
-				require.NoError(t, os.WriteFile(filepath.Join(targetPath, "prevent-directory-removal"), nil, 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(targetPath, "prevent-directory-removal"), nil, 0o600))
 			},
 			expectCode:      codes.Internal,
 			expectMsgPrefix: "unable to remove target path",
@@ -351,8 +371,8 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			targetPath := filepath.Join(targetPathBase, "target-path")
 
 			// Write out the meta file to simulate a successful mount
-			require.NoError(t, os.Mkdir(targetPath, 0755))
-			require.NoError(t, writeMeta(targetPath, nsAPISocketDir))
+			require.NoError(t, os.Mkdir(targetPath, 0o750))
+			require.NoError(t, writeMeta(targetPath, nsmSocketDir))
 
 			if tt.mungeTargetPath != nil {
 				tt.mungeTargetPath(t, targetPath)
@@ -402,19 +422,23 @@ type client struct {
 	csi.NodeClient
 }
 
-func startDriver(t *testing.T) (client, string) {
-	nsAPISocketDir := t.TempDir()
+func startDriver(t *testing.T) (c client, nsmSocketDir string) {
+	nsmSocketDir = t.TempDir()
 
-	d, err := New(Config{
-		Log:                     logr.Discard(),
-		NodeID:                  testNodeID,
-		NsAPISocketDir: nsAPISocketDir,
+	d, err := New(&Config{
+		Log:           log.FromContext(context.Background()),
+		NodeID:        testNodeID,
+		PluginName:    "csi.networkservicemesh.io",
+		Version:       "v1.0.0",
+		NSMSocketDir:  nsmSocketDir,
+		customMount:   bindMountRWTest,
+		customUnmount: unmountTest,
 	})
 	require.NoError(t, err)
 
 	l, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { l.Close() })
+	t.Cleanup(func() { _ = l.Close() })
 	s := grpc.NewServer()
 	t.Cleanup(s.Stop)
 
@@ -445,7 +469,7 @@ func startDriver(t *testing.T) (client, string) {
 	var conn *grpc.ClientConn
 	select {
 	case conn = <-connCh:
-		t.Cleanup(func() { conn.Close() })
+		t.Cleanup(func() { _ = conn.Close() })
 	case err := <-errCh:
 		require.NoError(t, err)
 	}
@@ -453,7 +477,7 @@ func startDriver(t *testing.T) (client, string) {
 	return client{
 		IdentityClient: csi.NewIdentityClient(conn),
 		NodeClient:     csi.NewNodeClient(conn),
-	}, nsAPISocketDir
+	}, nsmSocketDir
 }
 
 func assertMounted(t *testing.T, targetPath, src string) {
@@ -473,8 +497,8 @@ func readMeta(targetPath string) (string, error) {
 	return string(data), err
 }
 
-func writeMeta(targetPath string, meta string) error {
-	return os.WriteFile(metaPath(targetPath), []byte(meta), 0600)
+func writeMeta(targetPath, meta string) error {
+	return os.WriteFile(metaPath(targetPath), []byte(meta), 0o600)
 }
 
 func metaPath(targetPath string) string {

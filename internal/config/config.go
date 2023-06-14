@@ -14,24 +14,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package logkeys is used for logging
-package logkeys
+// Package config - contain environment variables used by csi driver
+package config
 
-const (
-	// CSISocketPath log constant
-	CSISocketPath = "csiSocketPath"
-	// FullMethod log constant
-	FullMethod = "fullMethod"
-	// NodeID log constant
-	NodeID = "nodeID"
-	// TargetPath log constant
-	TargetPath = "targetPath"
-	// Version log constant
-	Version = "version"
-	// VolumeID log constant
-	VolumeID = "volumeID"
-	// VolumePath log constant
-	VolumePath = "volumePath"
-	// NSMSocketDir log constant
-	NSMSocketDir = "NSMSocketDir"
+import (
+	"github.com/pkg/errors"
 )
+
+// Config - configuration for cmd-csi-dirver
+type Config struct {
+	NodeName string `default:"" desc:"Envvar from which to obtain the node ID" split_words:"true"`
+	Version  string `default:"undefined" desc:"Version"`
+}
+
+// IsValid - check if configuration is valid
+func (c *Config) IsValid() error {
+	if c.NodeName == "" {
+		return errors.New("node name is required")
+	}
+	return nil
+}

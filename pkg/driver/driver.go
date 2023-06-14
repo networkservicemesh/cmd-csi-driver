@@ -1,36 +1,51 @@
+// Copyright (c) 2023 Cisco and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package driver contains a CSI driver implementation
 package driver
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/go-logr/logr"
-	"github.com/networkservicemesh/cmd-csi-driver/internal/version"
-	"github.com/networkservicemesh/cmd-csi-driver/pkg/logkeys"
-	"github.com/networkservicemesh/cmd-csi-driver/pkg/mount"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/spiffe/spiffe-csi/pkg/mount"
+
+	"github.com/networkservicemesh/cmd-csi-driver/pkg/logkeys"
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
 )
 
-const (
-	pluginName = "csi.networkservicemesh.io"
-)
-
-var (
-	// We replace these in tests since bind mounting generally requires root.
-	bindMountRW  = mount.BindMountRW
-	unmount      = mount.Unmount
-	isMountPoint = mount.IsMountPoint
-)
+type mountFunction func(string, string) error
+type unmountFunction func(string) error
+type isMountPointFunction func(string) (bool, error)
 
 // Config is the configuration for the driver
 type Config struct {
-	Log                     logr.Logger
-	NodeID                  string
-	NsAPISocketDir string
+	Log          log.Logger
+	NodeID       string
+	PluginName   string
+	Version      string
+	NSMSocketDir string
+
+	customMount   mountFunction
+	customUnmount unmountFunction
 }
 
 // Driver is the ephemeral-inline CSI driver implementation
@@ -38,43 +53,65 @@ type Driver struct {
 	csi.UnimplementedIdentityServer
 	csi.UnimplementedNodeServer
 
-	log                     logr.Logger
-	nodeID                  string
-	nsAPISocketDir string
+	logger       log.Logger
+	nodeID       string
+	pluginName   string
+	version      string
+	nsmSocketDir string
+
+	mount        mountFunction
+	unmount      unmountFunction
+	isMountPoint isMountPointFunction
 }
 
 // New creates a new driver with the given config
-func New(config Config) (*Driver, error) {
+func New(config *Config) (*Driver, error) {
 	switch {
 	case config.NodeID == "":
 		return nil, errors.New("node ID is required")
-	case config.NsAPISocketDir == "":
+	case config.NSMSocketDir == "":
 		return nil, errors.New("network service API socket directory is required")
 	}
-	return &Driver{
-		log:                     config.Log,
-		nodeID:                  config.NodeID,
-		nsAPISocketDir: config.NsAPISocketDir,
-	}, nil
+	d := &Driver{
+		logger:       config.Log,
+		nodeID:       config.NodeID,
+		pluginName:   config.PluginName,
+		version:      config.Version,
+		nsmSocketDir: config.NSMSocketDir,
+		mount:        mount.BindMountRW,
+		unmount:      mount.Unmount,
+		isMountPoint: mount.IsMountPoint,
+	}
+	if config.customMount != nil {
+		d.mount = config.customMount
+	}
+	if config.customUnmount != nil {
+		d.unmount = config.customUnmount
+	}
+
+	return d, nil
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // Identity Server
 /////////////////////////////////////////////////////////////////////////////
 
-func (d *Driver) GetPluginInfo(ctx context.Context, req *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
+// GetPluginInfo returns plugin info
+func (d *Driver) GetPluginInfo(_ context.Context, _ *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 	return &csi.GetPluginInfoResponse{
-		Name:          pluginName,
-		VendorVersion: version.Version(),
+		Name:          d.pluginName,
+		VendorVersion: d.version,
 	}, nil
 }
 
-func (d *Driver) GetPluginCapabilities(ctx context.Context, req *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+// GetPluginCapabilities returns plugin capabilities
+func (d *Driver) GetPluginCapabilities(_ context.Context, _ *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
 	// Only the Node server is implemented. No other capabilities are available.
 	return &csi.GetPluginCapabilitiesResponse{}, nil
 }
 
-func (d *Driver) Probe(ctx context.Context, req *csi.ProbeRequest) (*csi.ProbeResponse, error) {
+// Probe verifies that the plugin is in a healthy state
+func (d *Driver) Probe(_ context.Context, _ *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 	return &csi.ProbeResponse{}, nil
 }
 
@@ -82,20 +119,21 @@ func (d *Driver) Probe(ctx context.Context, req *csi.ProbeRequest) (*csi.ProbeRe
 // Node Server implementation
 /////////////////////////////////////////////////////////////////////////////
 
-func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (_ *csi.NodePublishVolumeResponse, err error) {
+// NodePublishVolume is called when a workload that wants to use the specified volume is placed (scheduled) on a node
+func (d *Driver) NodePublishVolume(_ context.Context, req *csi.NodePublishVolumeRequest) (_ *csi.NodePublishVolumeResponse, err error) {
 	ephemeralMode := req.GetVolumeContext()["csi.storage.k8s.io/ephemeral"]
 
-	log := d.log.WithValues(
-		logkeys.VolumeID, req.VolumeId,
-		logkeys.TargetPath, req.TargetPath,
-	)
+	logger := d.logger.
+		WithField(logkeys.VolumeID, req.VolumeId).
+		WithField(logkeys.TargetPath, req.TargetPath)
+
 	if req.VolumeCapability != nil && req.VolumeCapability.AccessMode != nil {
-		log = log.WithValues("access_mode", req.VolumeCapability.AccessMode.Mode)
+		logger = logger.WithField("access_mode", req.VolumeCapability.AccessMode.Mode)
 	}
 
 	defer func() {
 		if err != nil {
-			log.Error(err, "Failed to publish volume")
+			logger.Error(err, "Failed to publish volume")
 		}
 	}()
 
@@ -122,7 +160,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	}
 
 	// Create the target path (required by CSI interface)
-	if err := os.Mkdir(req.TargetPath, 0777); err != nil && !os.IsExist(err) {
+	if err := os.Mkdir(req.TargetPath, 0o750); err != nil && !os.IsExist(err) {
 		return nil, status.Errorf(codes.Internal, "unable to create target path %q: %v", req.TargetPath, err)
 	}
 
@@ -131,24 +169,24 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	// be writable by workload containers. We enforce that the CSI volume is
 	// marked read-only above, instructing the kubelet to mount it read-only
 	// into containers, while we mount the volume read-write to the host.
-	if err := bindMountRW(d.nsAPISocketDir, req.TargetPath); err != nil {
+	if err := d.mount(d.nsmSocketDir, req.TargetPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to mount %q: %v", req.TargetPath, err)
 	}
 
-	log.Info("Volume published")
+	logger.Info("Volume published")
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (_ *csi.NodeUnpublishVolumeResponse, err error) {
-	log := d.log.WithValues(
-		logkeys.VolumeID, req.VolumeId,
-		logkeys.TargetPath, req.TargetPath,
-	)
+// NodeUnpublishVolume is a reverse operation of NodePublishVolume
+func (d *Driver) NodeUnpublishVolume(_ context.Context, req *csi.NodeUnpublishVolumeRequest) (_ *csi.NodeUnpublishVolumeResponse, err error) {
+	logger := d.logger.
+		WithField(logkeys.VolumeID, req.VolumeId).
+		WithField(logkeys.TargetPath, req.TargetPath)
 
 	defer func() {
 		if err != nil {
-			log.Error(err, "Failed to unpublish volume")
+			logger.Error(err, "Failed to unpublish volume")
 		}
 	}()
 
@@ -160,19 +198,20 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 		return nil, status.Error(codes.InvalidArgument, "request missing required target path")
 	}
 
-	if err := unmount(req.TargetPath); err != nil {
+	if err := d.unmount(req.TargetPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to unmount %q: %v", req.TargetPath, err)
 	}
 	if err := os.Remove(req.TargetPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to remove target path %q: %v", req.TargetPath, err)
 	}
 
-	log.Info("Volume unpublished")
+	logger.Info("Volume unpublished")
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
+// NodeGetCapabilities allows to check the supported capabilities of node service provided by the Plugin
+func (d *Driver) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: []*csi.NodeServiceCapability{
 			{
@@ -193,27 +232,28 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 	}, nil
 }
 
-func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+// NodeGetInfo returns the node identifier
+func (d *Driver) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId:            d.nodeID,
 		MaxVolumesPerNode: 0,
 	}, nil
 }
 
-func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
-	log := d.log.WithValues(
-		logkeys.VolumeID, req.VolumeId,
-		logkeys.VolumePath, req.VolumePath,
-	)
+// NodeGetVolumeStats returns the volume capacity statistics available for the volume.
+func (d *Driver) NodeGetVolumeStats(_ context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
+	logger := d.logger.
+		WithField(logkeys.VolumeID, req.VolumeId).
+		WithField(logkeys.VolumePath, req.VolumePath)
 
 	volumeConditionAbnormal := false
 	volumeConditionMessage := "mounted"
 	if err := d.checkNsAPIMount(req.VolumePath); err != nil {
 		volumeConditionAbnormal = true
 		volumeConditionMessage = err.Error()
-		log.Error(err, "Volume is unhealthy")
+		logger.Error(err, "Volume is unhealthy")
 	} else {
-		log.Info("Volume is healthy")
+		logger.Info("Volume is healthy")
 	}
 
 	return &csi.NodeGetVolumeStatsResponse{
@@ -225,28 +265,28 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 }
 
 func (d *Driver) checkNsAPIMount(volumePath string) error {
-	// Check whether or not it is a mount point.
-	if ok, err := isMountPoint(volumePath); err != nil {
-		return fmt.Errorf("failed to determine root for volume path mount: %w", err)
+	// Check whether it is a mount point.
+	if ok, err := d.isMountPoint(volumePath); err != nil {
+		return errors.Errorf("failed to determine root for volume path mount: %v", err)
 	} else if !ok {
 		return errors.New("volume path is not mounted")
 	}
 	// If a mount point, try to list files... this should fail if the mount is
 	// broken for whatever reason.
 	if _, err := os.ReadDir(volumePath); err != nil {
-		return fmt.Errorf("unable to list contents of volume path: %w", err)
+		return errors.Errorf("unable to list contents of volume path: %v", err)
 	}
 	return nil
 }
 
 func isVolumeCapabilityPlainMount(volumeCapability *csi.VolumeCapability) bool {
-	mount := volumeCapability.GetMount()
+	m := volumeCapability.GetMount()
 	switch {
-	case mount == nil:
+	case m == nil:
 		return false
-	case mount.FsType != "":
+	case m.FsType != "":
 		return false
-	case len(mount.MountFlags) != 0:
+	case len(m.MountFlags) != 0:
 		return false
 	}
 	return true

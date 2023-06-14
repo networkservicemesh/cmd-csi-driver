@@ -1,29 +1,51 @@
+// Copyright (c) 2023 Cisco and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package server is used to run grpc server
 package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"os"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/go-logr/logr"
-	"github.com/networkservicemesh/cmd-csi-driver/pkg/logkeys"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+
+	"github.com/networkservicemesh/cmd-csi-driver/pkg/logkeys"
+
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
 )
 
+// Config is used to run grpc server
 type Config struct {
-	Log           logr.Logger
+	Log           log.Logger
 	CSISocketPath string
 	Driver        Driver
 }
 
+// Driver is a CSI driver interface
 type Driver interface {
 	csi.IdentityServer
 	csi.NodeServer
 }
 
+// Run starts grpc server
 func Run(config Config) error {
 	if config.CSISocketPath == "" {
 		return errors.New("CSI socket path is required")
@@ -35,7 +57,7 @@ func Run(config Config) error {
 
 	listener, err := net.Listen("unix", config.CSISocketPath)
 	if err != nil {
-		return fmt.Errorf("unable to create CSI socket listener: %w", err)
+		return errors.Errorf("unable to create CSI socket listener: %v", err)
 	}
 
 	rpcLogger := rpcLogger{Log: config.Log}
@@ -52,27 +74,29 @@ func Run(config Config) error {
 }
 
 type rpcLogger struct {
-	Log logr.Logger
+	Log log.Logger
 }
 
+// UnaryRPCLogger is used for logging
 func (l rpcLogger) UnaryRPCLogger(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	log := l.Log.WithValues(logkeys.FullMethod, info.FullMethod)
+	logger := l.Log.WithField(logkeys.FullMethod, info.FullMethod)
 	resp, err := handler(ctx, req)
 	if err != nil {
-		log.Error(err, "RPC failed")
+		logger.Error(err, "RPC failed")
 	} else {
-		log.V(2).Info("RPC succeeded")
+		logger.Info("RPC succeeded")
 	}
 	return resp, err
 }
 
+// StreamRPCLogger is used for logging
 func (l rpcLogger) StreamRPCLogger(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	log := l.Log.WithValues(logkeys.FullMethod, info.FullMethod)
+	logger := l.Log.WithField(logkeys.FullMethod, info.FullMethod)
 	err := handler(srv, ss)
 	if err != nil {
-		log.Error(err, "RPC failed")
+		logger.Error(err, "RPC failed")
 	} else {
-		log.V(2).Info("RPC succeeded")
+		logger.Info("RPC succeeded")
 	}
 	return err
 }

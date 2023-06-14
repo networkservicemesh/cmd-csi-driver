@@ -2,7 +2,7 @@
 
 A [Container Storage
 Interface](https://github.com/container-storage-interface/spec/blob/master/spec.md)
-driver for Kubernetes that facilitates injection of the Network Service API which is nominally served over a Unix Domain Socket created by [Network Service Manager](https://github.com/networkservicemesh/cmd-nsmgr) (NSMGR) DaemonSet to run one API server instance per host. Therefore it is necessary to inject the Network Service API socket into each pod. The primary motivation for using a CSI driver for this purpose is to avoid the use of
+driver for Kubernetes that facilitates injection of the Network Service API which is nominally served over a Unix Domain Socket created by [Network Service Manager](https://github.com/networkservicemesh/cmd-nsmgr) (NSMGR) DaemonSet. Therefore it is necessary to inject the Network Service API socket into each pod. The primary motivation for using a CSI driver for this purpose is to avoid the use of
 [hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)
 volumes in workload containers, which is commonly disallowed or limited by
 policy due to inherent security concerns. Note that `hostPath` volumes are
@@ -14,7 +14,7 @@ This driver mounts a directory containing a Network Service API socket as an eph
 
 ## How it Works
 
-This component is deployed as a container in the NSMGR DaemonSet and registered with the kubelet using the official CSI Node Driver Registrar image. The NSM CSI Driver and the NSMGR share the directory hosting the Network Service API Unix Domain Socket using a `hostPath` volume. An `emptyDir` volume cannot be used since the backing directory would be removed if the NSM CSI Driver pod is restarted,invalidating the mount into workload containers.
+This component can be deployed as a sidecar for the NSMGR or a separate pod and registered with the kubelet using the official CSI Node Driver Registrar image. The NSM CSI Driver and the NSMGR share the directory hosting the Network Service API Unix Domain Socket using a `hostPath` volume. An `emptyDir` volume cannot be used since the backing directory would be removed if the NSM CSI Driver pod is restarted,invalidating the mount into workload containers.
 
 When pods declare an ephemeral inline mount using this driver, the driver is invoked to mount the volume. The driver does a read-only bind mount of the directory containing the Network Service API Unix Domain Socket into the container at the requested target path.
 
@@ -27,12 +27,7 @@ CSI Ephemeral Inline Volumes require at least Kubernetes 1.15 (enabled via the `
 
 ## Limitations
 
-CSI drivers are registered as plugins and otherwise interact with the Kubelet, which requires several `hostPath` volumes. As such, this driver cannot be used in environments where `hostPath` volumes are forbidden.
-
-## Example
-
-An example deployment can be found [here](./example).
-CSI drivers used for both SPIRE and NSM Unix Domain Sockets in the example. NSM components mount the CSI volume of spire-agent, forwarder mounts CSI volume created by NSMGR.
+CSI drivers are registered as plugins and interact with the Kubelet, which requires several `hostPath` volumes. As such, this driver cannot be used in environments where `hostPath` volumes are forbidden.
 
 ## Troubleshooting
 
@@ -57,29 +52,6 @@ driver health is restored. The describe command (i.e. kubectl describe) will sho
 
 Ensure that the Network Service API socket directory is shared with the NSM CSI Driver via a `hostPath` volume. The directory backing `emptyDir` volumes are tied to the pod instance and invalidated when the pod is restarted.
 
-# Build
+## Acknowledgments
 
-## Build cmd binary locally
-
-You can build the binary locally by executing
-
-```bash
-make build
-```
-
-## Build Docker container
-
-You can build the docker container by running:
-
-```bash
-make docker-build
-```
-
-# Testing
-
-To run testing run:
-
-```bash
-make test
-```
-
+This application was developed based on [spiffe-csi](https://github.com/spiffe/spiffe-csi)

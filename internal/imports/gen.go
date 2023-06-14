@@ -14,24 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package logkeys is used for logging
-package logkeys
+// Package imports is used for generating list of imports to optimize use of docker build cache
+package imports
 
-const (
-	// CSISocketPath log constant
-	CSISocketPath = "csiSocketPath"
-	// FullMethod log constant
-	FullMethod = "fullMethod"
-	// NodeID log constant
-	NodeID = "nodeID"
-	// TargetPath log constant
-	TargetPath = "targetPath"
-	// Version log constant
-	Version = "version"
-	// VolumeID log constant
-	VolumeID = "volumeID"
-	// VolumePath log constant
-	VolumePath = "volumePath"
-	// NSMSocketDir log constant
-	NSMSocketDir = "NSMSocketDir"
-)
+//go:generate bash -c "rm -rf imports*.go"
+//go:generate bash -c "cd $(mktemp -d) && GO111MODULE=on go install github.com/edwarnicke/imports-gen@v1.1.2"
+//go:generate bash -c "GOOS=linux ${GOPATH}/bin/imports-gen"
