@@ -18,9 +18,6 @@ package main
 
 import (
 	"context"
-	"flag"
-	"fmt"
-	"os"
 
 	"github.com/kelseyhightower/envconfig"
 
@@ -31,25 +28,11 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 )
 
-var (
-	pluginNameFlag    = flag.String("plugin-name", "csi.networkservicemesh.io", "Plugin name to register")
-	nsmSocketDirFlag  = flag.String("nsm-socket-dir", "", "Path to the NSM API socket directory")
-	csiSocketPathFlag = flag.String("csi-socket-path", "/nsm-csi/csi.sock", "Path to the CSI socket")
-)
-
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log.EnableTracing(true)
 	logger := log.FromContext(ctx)
-
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Provides the NSM API socket directory via ephemeral inline CSI volumes")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintf(os.Stderr, "Usage:\n")
-		flag.PrintDefaults()
-	}
-	flag.Parse()
 
 	c := &config.Config{}
 	if err := envconfig.Usage("nsm", c); err != nil {
@@ -61,15 +44,15 @@ func main() {
 
 	logger.WithField(logkeys.Version, c.Version).
 		WithField(logkeys.NodeID, c.NodeName).
-		WithField(logkeys.NSMSocketDir, *nsmSocketDirFlag).
-		WithField(logkeys.CSISocketPath, *csiSocketPathFlag).Info("Starting")
+		WithField(logkeys.NSMSocketDir, c.SocketDir).
+		WithField(logkeys.CSISocketPath, c.CSISocketPath).Info("Starting")
 
 	d, err := driver.New(&driver.Config{
 		Log:          logger,
 		NodeID:       c.NodeName,
-		PluginName:   *pluginNameFlag,
+		PluginName:   c.PluginName,
 		Version:      c.Version,
-		NSMSocketDir: *nsmSocketDirFlag,
+		NSMSocketDir: c.SocketDir,
 	})
 	if err != nil {
 		logger.Fatalf("Failed to create driver: %v", err)
@@ -77,7 +60,7 @@ func main() {
 
 	serverConfig := server.Config{
 		Log:           logger,
-		CSISocketPath: *csiSocketPathFlag,
+		CSISocketPath: c.CSISocketPath,
 		Driver:        d,
 	}
 

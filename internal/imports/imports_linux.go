@@ -4,7 +4,6 @@ package imports
 import (
 	_ "context"
 	_ "encoding/json"
-	_ "flag"
 	_ "fmt"
 	_ "github.com/container-storage-interface/spec/lib/go/csi"
 	_ "github.com/kelseyhightower/envconfig"

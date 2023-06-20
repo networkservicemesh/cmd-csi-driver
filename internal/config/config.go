@@ -23,14 +23,20 @@ import (
 
 // Config - configuration for cmd-csi-dirver
 type Config struct {
-	NodeName string `default:"" desc:"Envvar from which to obtain the node ID" split_words:"true"`
-	Version  string `default:"undefined" desc:"Version"`
+	NodeName      string `default:"" desc:"Envvar from which to obtain the node ID" split_words:"true"`
+	PluginName    string `default:"csi.networkservicemesh.io" desc:"Plugin name to register" split_words:"true"`
+	SocketDir     string `default:"" desc:"Path to the NSM API socket directory" split_words:"true"`
+	CSISocketPath string `default:"/nsm-csi/csi.sock" desc:"Path to the CSI socket" split_words:"true"`
+	Version       string `default:"undefined" desc:"Version"`
 }
 
 // IsValid - check if configuration is valid
 func (c *Config) IsValid() error {
 	if c.NodeName == "" {
 		return errors.New("node name is required")
+	}
+	if c.SocketDir == "" {
+		return errors.New("socket dir is required")
 	}
 	return nil
 }
