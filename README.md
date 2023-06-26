@@ -1,75 +1,57 @@
-# Build
+# Network Service Mesh CSI Driver
 
-## Build cmd binary locally
+A [Container Storage
+Interface](https://github.com/container-storage-interface/spec/blob/master/spec.md)
+driver for Kubernetes that facilitates injection of the Network Service API which is nominally served over a Unix Domain Socket created by [Network Service Manager](https://github.com/networkservicemesh/cmd-nsmgr) (NSMGR) DaemonSet. Therefore it is necessary to inject the Network Service API socket into each pod. The primary motivation for using a CSI driver for this purpose is to avoid the use of
+[hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath)
+volumes in workload containers, which is commonly disallowed or limited by
+policy due to inherent security concerns. Note that `hostPath` volumes are
+still required for the CSI driver to interact with the
+[Kubelet](https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/)
+(see [Limitations](#limitations)).
 
-You can build the locally by executing
+This driver mounts a directory containing a Network Service API socket as an ephemeral inline volume into workload pods.
 
-```bash
-go build ./...
-```
+## How it Works
 
-## Build Docker container
+This component can be deployed as a sidecar for the NSMGR or a separate pod and registered with the kubelet using the official CSI Node Driver Registrar image. The NSM CSI Driver and the NSMGR share the directory hosting the Network Service API Unix Domain Socket using a `hostPath` volume. An `emptyDir` volume cannot be used since the backing directory would be removed if the NSM CSI Driver pod is restarted,invalidating the mount into workload containers.
 
-You can build the docker container by running:
+When pods declare an ephemeral inline mount using this driver, the driver is invoked to mount the volume. The driver does a read-only bind mount of the directory containing the Network Service API Unix Domain Socket into the container at the requested target path.
 
-```bash
-docker build .
-```
+Similarly, when the pod is destroyed, the driver is invoked and removes the
+bind mount.
 
-# Testing
+## Dependencies
 
-## Testing Docker container
+CSI Ephemeral Inline Volumes require at least Kubernetes 1.15 (enabled via the `CSIInlineVolume` feature gate) or 1.16 (enabled by default).
 
-Testing is run via a Docker container.  To run testing run:
+## Limitations
 
-```bash
-docker run --privileged --rm $(docker build -q --target test .)
-```
+CSI drivers are registered as plugins and interact with the Kubelet, which requires several `hostPath` volumes. As such, this driver cannot be used in environments where `hostPath` volumes are forbidden.
 
-# Debugging
+## Troubleshooting
 
-## Debugging the tests
-If you wish to debug the test code itself, that can be acheived by running:
+This component has a fairly simple design and function but some of the
+following problems may manifest.
 
-```bash
-docker run --privileged --rm -p 40000:40000 $(docker build -q --target debug .)
-```
+### Failure to Register with the Kubelet
 
-This will result in the tests running under dlv.  Connecting your debugger to localhost:40000 will allow you to debug.
+This problem can be diagnosed by dumping the logs of the kubelet (if possible), the driver registrar container, and the NSM CSI driver container. Likely suspects are a misconfiguratoin of the various volume mounts needed for communication between the register, the NSM CSI driver, and the kubelet.
 
-```bash
--p 40000:40000
-```
-forwards port 40000 in the container to localhost:40000 where you can attach with your debugger.
+### Failure to Mount the Socket Directory
 
-```bash
---target debug
-```
+This problem can be diagnosed by dumping the NSM CSI driver logs.
 
-Runs the debug target, which is just like the test target, but starts tests with dlv listening on port 40000 inside the container.
+### Failure to Terminate Pods when Driver is Unhealthy Or Removed
 
-## Debugging the cmd
+If the NSM CSI Driver is removed (or is otherwise unhealthy), any pods that
+contain a volume mounted by the driver will fail to fully terminate until
+driver health is restored. The describe command (i.e. kubectl describe) will show the failure to unmount the volume. Kubernetes will continue to retry to unmount the volume via the CSI driver. Once the driver has been restored, the unmounting will eventually succeed and the pod will be fully terminated.
 
-When you run 'cmd' you will see an early line of output that tells you:
+### Broken Mount when the CSI Driver Pod is Restarted
 
-```Setting env variable DLV_LISTEN_FORWARDER to a valid dlv '--listen' value will cause the dlv debugger to execute this binary and listen as directed.```
+Ensure that the Network Service API socket directory is shared with the NSM CSI Driver via a `hostPath` volume. The directory backing `emptyDir` volumes are tied to the pod instance and invalidated when the pod is restarted.
 
-If you follow those instructions when running the Docker container:
-```bash
-docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 50000:50000 --rm $(docker build -q --target test .)
-```
+## Acknowledgments
 
-```-e DLV_LISTEN_FORWARDER=:50000``` tells docker to set the environment variable DLV_LISTEN_FORWARDER to :50000 telling
-dlv to listen on port 50000.
-
-```-p 50000:50000``` tells docker to forward port 50000 in the container to port 50000 in the host.  From there, you can
-just connect dlv using your favorite IDE and debug cmd.
-
-## Debugging the tests and the cmd
-
-```bash
-docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 40000:40000 -p 50000:50000 --rm $(docker build -q --target debug .)
-```
-
-Please note, the tests **start** the cmd, so until you connect to port 40000 with your debugger and walk the tests
-through to the point of running cmd, you will not be able to attach a debugger on port 50000 to the cmd.
+This application was developed based on [spiffe-csi](https://github.com/spiffe/spiffe-csi)
