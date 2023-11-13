@@ -1,6 +1,6 @@
 module github.com/networkservicemesh/cmd-csi-driver
 
-go 1.18
+go 1.20
 
 require (
 	github.com/container-storage-interface/spec v1.7.0

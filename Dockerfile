@@ -1,8 +1,8 @@
-FROM golang:1.18.2-buster as go
+FROM golang:1.20.1-buster as go
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOBIN=/bin
-RUN go install github.com/go-delve/delve/cmd/dlv@v1.8.2
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.20.1
 
 FROM go as build
 WORKDIR /build
