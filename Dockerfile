@@ -2,7 +2,7 @@ FROM golang:1.20.11 as go
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOBIN=/bin
-RUN go install github.com/go-delve/delve/cmd/dlv@v1.8.2
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.20.2
 
 FROM go as build
 WORKDIR /build
