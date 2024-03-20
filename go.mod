@@ -9,7 +9,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spiffe/spiffe-csi v0.2.3
 	github.com/stretchr/testify v1.8.4
-	google.golang.org/grpc v1.59.0
+	google.golang.org/grpc v1.60.1
 )
 
 require (
