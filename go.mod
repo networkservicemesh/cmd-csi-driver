@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/container-storage-interface/spec v1.7.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/sdk v0.5.1-0.20240411170628-889386da5699
+	github.com/networkservicemesh/sdk v0.5.1-0.20240415093720-3eafbf6156d7
 	github.com/pkg/errors v0.9.1
 	github.com/spiffe/spiffe-csi v0.2.3
 	github.com/stretchr/testify v1.8.4
