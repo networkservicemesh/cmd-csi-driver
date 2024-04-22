@@ -12,6 +12,14 @@ still required for the CSI driver to interact with the
 
 This driver mounts a directory containing a Network Service API socket as an ephemeral inline volume into workload pods.
 
+## Envorinment config
+
+* `NSM_NODE_NAME`       - Envvar from which to obtain the node ID
+* `NSM_PLUGIN_NAME`     - Plugin name to register (default: "csi.networkservicemesh.io")
+* `NSM_SOCKET_DIR`      - Path to the NSM API socket directory
+* `NSM_CSI_SOCKET_PATH` - Path to the CSI socket (default: "/nsm-csi/csi.sock")
+* `NSM_VERSION`         - Version (default: "undefined")
+
 ## How it Works
 
 This component can be deployed as a sidecar for the NSMGR or a separate pod and registered with the kubelet using the official CSI Node Driver Registrar image. The NSM CSI Driver and the NSMGR share the directory hosting the Network Service API Unix Domain Socket using a `hostPath` volume. An `emptyDir` volume cannot be used since the backing directory would be removed if the NSM CSI Driver pod is restarted,invalidating the mount into workload containers.
