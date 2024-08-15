@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Cisco and/or its affiliates.
+// Copyright (c) 2023-2024 Cisco and/or its affiliates.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -26,6 +26,7 @@ import (
 	"github.com/networkservicemesh/cmd-csi-driver/pkg/logkeys"
 	"github.com/networkservicemesh/cmd-csi-driver/pkg/server"
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
+	"github.com/networkservicemesh/sdk/pkg/tools/pprofutils"
 )
 
 func main() {
@@ -40,6 +41,11 @@ func main() {
 	}
 	if err := envconfig.Process("nsm", c); err != nil {
 		logger.Fatalf("error processing rootConf from env: %+v", err)
+	}
+
+	// Configure pprof
+	if c.PprofEnabled {
+		go pprofutils.ListenAndServe(ctx, c.PprofListenOn)
 	}
 
 	logger.WithField(logkeys.Version, c.Version).

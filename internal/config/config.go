@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Cisco and/or its affiliates.
+// Copyright (c) 2023-2024 Cisco and/or its affiliates.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -28,6 +28,8 @@ type Config struct {
 	SocketDir     string `default:"" desc:"Path to the NSM API socket directory" split_words:"true"`
 	CSISocketPath string `default:"/nsm-csi/csi.sock" desc:"Path to the CSI socket" split_words:"true"`
 	Version       string `default:"undefined" desc:"Version"`
+	PprofEnabled  bool   `default:"false" desc:"is pprof enabled" split_words:"true"`
+	PprofListenOn string `default:"localhost:6060" desc:"pprof URL to ListenAndServe" split_words:"true"`
 }
 
 // IsValid - check if configuration is valid
