@@ -19,6 +19,8 @@ This driver mounts a directory containing a Network Service API socket as an eph
 * `NSM_SOCKET_DIR`      - Path to the NSM API socket directory
 * `NSM_CSI_SOCKET_PATH` - Path to the CSI socket (default: "/nsm-csi/csi.sock")
 * `NSM_VERSION`         - Version (default: "undefined")
+* `NSM_PPROF_ENABLED`   - is pprof enabled (default: "false")
+* `NSM_PPROF_LISTEN_ON` - pprof URL to ListenAndServe (default: "localhost:6060")
 
 ## How it Works
 

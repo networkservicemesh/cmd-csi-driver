@@ -8,6 +8,7 @@ import (
 	_ "github.com/container-storage-interface/spec/lib/go/csi"
 	_ "github.com/kelseyhightower/envconfig"
 	_ "github.com/networkservicemesh/sdk/pkg/tools/log"
+	_ "github.com/networkservicemesh/sdk/pkg/tools/pprofutils"
 	_ "github.com/pkg/errors"
 	_ "github.com/spiffe/spiffe-csi/pkg/mount"
 	_ "github.com/stretchr/testify/assert"
