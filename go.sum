@@ -13,8 +13,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/networkservicemesh/sdk v0.5.1-0.20250226083449-bfb5813a6d99 h1:AdUcqJAGzXnbWh9tNAWiXXdgtmxoJXFTRUbtRo/hyfE=
-github.com/networkservicemesh/sdk v0.5.1-0.20250226083449-bfb5813a6d99/go.mod h1:KJt1xIXbl+xYi+qE+l2y9klwsIaXIr7lo2PJeA5ZIVc=
+github.com/networkservicemesh/sdk v1.14.3-rc.2 h1:ok+1AaKmE4ozILHJw6faMVlNAshj4L/tR0zJ7f9LNrs=
+github.com/networkservicemesh/sdk v1.14.3-rc.2/go.mod h1:pG8hDs3eS0PHnaEDv7KZN5ENAYRfMjrNffNuc5P5g98=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
