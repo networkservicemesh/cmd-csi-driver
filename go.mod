@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/container-storage-interface/spec v1.7.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/sdk v0.5.1-0.20261022125515-7da756454dbc
+	github.com/networkservicemesh/sdk v0.5.1-0.20261026134645-9faef5a5ce2e
 	github.com/pkg/errors v0.9.1
 	github.com/spiffe/spiffe-csi v0.2.3
 	github.com/stretchr/testify v1.11.1
@@ -20,7 +20,7 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
